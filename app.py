@@ -12,14 +12,15 @@ from email import encoders
 try:
     from fpdf import FPDF
 except ImportError:
-    st.error("Please add 'fpdf', 'openpyxl', and 'pandas' to your requirements.txt.")
+    st.error("Add 'fpdf', 'openpyxl', and 'pandas' to your requirements.txt.")
 
-# --- CREDENTIALS (UPDATED) ---
+# --- CREDENTIALS ---
 USER_EMAIL = "saksham.xtm@gmail.com"
 APP_PASSWORD = "up78ex2121" 
 
 SAVE_FOLDER = "scrap_data_logs" 
-MASTER_FILE = f"SCRAP_Master_{datetime.now().strftime('%B_%Y')}.xlsx"
+# Filename remains monthly but internal dates are dd/mm/yyyy
+MASTER_FILE = f"SCRAP_Master_{datetime.now().strftime('%m_%Y')}.xlsx"
 
 if not os.path.exists(SAVE_FOLDER):
     os.makedirs(SAVE_FOLDER)
@@ -29,35 +30,39 @@ st.set_page_config(page_title="SCRAP MAIN SERVER", layout="wide", page_icon="�
 # --- PDF GENERATOR (MAIN SERVER BRANDING) ---
 class SCRAP_PDF(FPDF):
     def header(self):
-        self.set_fill_color(200, 220, 255)
+        self.set_fill_color(230, 230, 230)
         self.set_font('Arial', 'B', 18)
         self.cell(0, 15, 'SCRAP (Main Server)', 1, 1, 'C', 1)
         self.set_font('Arial', 'I', 10)
-        self.cell(0, 8, f'Official Transaction Ledger | Generated: {datetime.now().strftime("%d-%b-%Y %H:%M")}', 0, 1, 'C')
+        # Header Date Format Updated
+        self.cell(0, 8, f'Official Transaction Ledger | Generated: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
         self.ln(10)
 
-def generate_custom_pdf(df, title_date_range):
+def generate_custom_pdf(df, date_label):
     pdf = SCRAP_PDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     
-    # Table Config
     pdf.set_font("Arial", 'B', 8)
-    cols = {"Date": 25, "Vehicle": 30, "Party": 40, "Revenue": 25, "Purch": 25, "Report": 25, "Charge": 25, "Saving": 35}
+    # Date column width set for dd/mm/yyyy
+    cols = {"Date": 25, "Vehicle": 35, "Party": 45, "Revenue": 30, "Purch": 30, "Report": 30, "Charge": 25, "Saving": 40}
     
     for title, width in cols.items():
-        pdf.cell(width, 10, title, 1, 0, 'C')
+        pdf.cell(width, 10, title, 1, 0, 'C', 1)
     pdf.ln()
 
     pdf.set_font("Arial", '', 8)
     total_sav = 0
     for _, row in df.iterrows():
-        pdf.cell(cols["Date"], 10, str(row['Date']), 1)
+        # Ensure row date is formatted correctly in PDF
+        display_date = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%d/%m/%Y')
+        
+        pdf.cell(cols["Date"], 10, display_date, 1)
         pdf.cell(cols["Vehicle"], 10, str(row['Vehicle No']), 1)
         pdf.cell(cols["Party"], 10, str(row['Party Name']), 1)
-        pdf.cell(cols["Revenue"], 10, f"{row['Revenue']:.2f}", 1)
-        pdf.cell(cols["Purch"], 10, f"{row['Purchase']:.2f}", 1)
-        pdf.cell(cols["Report"], 10, f"{row['Report']:.2f}", 1)
-        pdf.cell(cols["Charge"], 10, f"{row['Vehicle Charge']:.2f}", 1)
+        pdf.cell(cols["Revenue"], 10, f"{row['Revenue']:,.2f}", 1)
+        pdf.cell(cols["Purch"], 10, f"{row['Purchase']:,.2f}", 1)
+        pdf.cell(cols["Report"], 10, f"{row['Report']:,.2f}", 1)
+        pdf.cell(cols["Charge"], 10, f"{row['Vehicle Charge']:,.2f}", 1)
         save_val = float(row['Total Saving'])
         pdf.cell(cols["Saving"], 10, f"{save_val:,.2f}", 1)
         total_sav += save_val
@@ -65,9 +70,9 @@ def generate_custom_pdf(df, title_date_range):
 
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, f"TOTAL PERIOD SAVING: INR {total_sav:,.2f}", 0, 1, 'R')
+    pdf.cell(0, 10, f"TOTAL SAVING: INR {total_sav:,.2f}", 0, 1, 'R')
     
-    f_name = f"SCRAP_Report_{title_date_range}.pdf"
+    f_name = f"SCRAP_Report_{date_label.replace('/','-')}.pdf"
     pdf.output(f_name)
     return f_name
 
@@ -77,8 +82,8 @@ def send_email_with_pdf(file_path):
         msg = MIMEMultipart()
         msg['From'] = USER_EMAIL
         msg['To'] = USER_EMAIL
-        msg['Subject'] = f"SCRAP SERVER REPORT - {datetime.now().strftime('%d %b')}"
-        msg.attach(MIMEText("Attached is the requested SCRAP PDF Report from the Main Server.", 'plain'))
+        msg['Subject'] = f"SCRAP SERVER REPORT - {datetime.now().strftime('%d/%m/%Y')}"
+        msg.attach(MIMEText("Attached is the SCRAP (Main Server) PDF report.", 'plain'))
         
         with open(file_path, "rb") as attachment:
             part = MIMEBase('application', 'octet-stream')
@@ -97,20 +102,20 @@ def send_email_with_pdf(file_path):
         st.error(f"Mail Server Error: {e}")
         return False
 
-# --- UI INTERFACE ---
+# --- APP UI ---
 st.title("🏗️ SCRAP (Main Server)")
-st.write(f"Logged in as: **{USER_EMAIL}**")
+st.write(f"Server Active | Date Format: **DD/MM/YYYY**")
 
-# --- DATA INPUT SECTION ---
+# --- DATA ENTRY ---
 if 'rows' not in st.session_state:
     st.session_state.rows = []
 
-with st.expander("➕ Create New Vehicle Entries", expanded=True):
-    num_v = st.number_input("How many vehicles today?", min_value=1, step=1, value=1)
+with st.expander("📝 Enter New Vehicle Data", expanded=True):
+    num_v = st.number_input("Number of vehicles", min_value=1, step=1, value=1)
     
     current_entries = []
     for i in range(num_v):
-        st.markdown(f"**Vehicle #{i+1}**")
+        st.markdown(f"**Vehicle Row #{i+1}**")
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         p_name = c1.text_input("Party", key=f"p{i}")
         v_no = c2.text_input("Vehicle No", key=f"v{i}")
@@ -119,13 +124,11 @@ with st.expander("➕ Create New Vehicle Entries", expanded=True):
         rep = c5.number_input("Report", key=f"rep{i}")
         chrg = c6.number_input("Charge", key=f"ch{i}")
         
-        # Calculation (Simplified for UI, uses split GST internally if needed)
-        # Based on previous logic: (Purchase - Report - Charge) + 36% (18+18) of Revenue
-        gst_amt = rev * 0.36
-        saving = (pur - rep - chrg) + gst_amt
+        # Calculation Logic (Revenue * 0.36 + Profit from transaction)
+        saving = (pur - rep - chrg) + (rev * 0.36)
         
         current_entries.append({
-            "Date": date.today().strftime("%Y-%m-%d"),
+            "Date": date.today().strftime("%d/%m/%Y"), # SETTING THE DD/MM/YYYY FORMAT
             "Party Name": p_name, "Vehicle No": v_no, "Revenue": rev,
             "Purchase": pur, "Report": rep, "Vehicle Charge": chrg, "Total Saving": saving
         })
@@ -136,7 +139,7 @@ col_today, col_range = st.columns(2)
 
 with col_today:
     st.subheader("📅 Today's Report")
-    if st.button("🚀 Generate Today's PDF & Send Mail", use_container_width=True):
+    if st.button("🚀 Sync to Excel & Email Today's PDF", use_container_width=True):
         today_df = pd.DataFrame(current_entries)
         
         # Update Master Excel
@@ -146,33 +149,34 @@ with col_today:
             today_df = pd.concat([old_df, today_df], ignore_index=True)
         today_df.to_excel(path, index=False)
         
-        # Generate PDF
-        pdf_file = generate_custom_pdf(pd.DataFrame(current_entries), date.today().strftime("%d-%b-%Y"))
+        # Generate and Send PDF
+        pdf_file = generate_custom_pdf(pd.DataFrame(current_entries), date.today().strftime("%d-%m-%Y"))
         if send_email_with_pdf(pdf_file):
-            st.success(f"Sent to {USER_EMAIL}")
+            st.success(f"Emailed to saksham.xtm@gmail.com")
             st.balloons()
             with open(pdf_file, "rb") as f:
-                st.download_button("📥 Download Today's PDF", f, file_name=pdf_file)
+                st.download_button("📥 Download PDF", f, file_name=pdf_file)
 
 with col_range:
-    st.subheader("🔍 Historical Report")
-    d1 = st.date_input("Start Date", value=date.today())
-    d2 = st.date_input("End Date", value=date.today())
+    st.subheader("🔍 Search by Date Range")
+    d1 = st.date_input("From Date", value=date.today())
+    d2 = st.date_input("To Date", value=date.today())
     
-    if st.button("🔎 Filter & Generate Range PDF", use_container_width=True):
+    if st.button("🔎 Generate Range PDF", use_container_width=True):
         path = os.path.join(SAVE_FOLDER, MASTER_FILE)
         if os.path.exists(path):
             master_df = pd.read_excel(path)
-            master_df['Date'] = pd.to_datetime(master_df['Date']).dt.date
-            mask = (master_df['Date'] >= d1) & (master_df['Date'] <= d2)
-            filtered_df = master_df.loc[mask]
+            # Convert string dates in excel to datetime objects for filtering
+            master_df['ParsedDate'] = pd.to_datetime(master_df['Date'], format='%d/%m/%Y').dt.date
+            mask = (master_df['ParsedDate'] >= d1) & (master_df['ParsedDate'] <= d2)
+            filtered_df = master_df.loc[mask].drop(columns=['ParsedDate'])
             
             if not filtered_df.empty:
-                range_pdf = generate_custom_pdf(filtered_df, f"{d1}_to_{d2}")
-                st.success(f"Report Generated for {len(filtered_df)} vehicles.")
+                range_pdf = generate_custom_pdf(filtered_df, f"{d1.strftime('%d-%m-%Y')}_to_{d2.strftime('%d-%m-%Y')}")
+                st.success(f"Report Generated for {len(filtered_df)} entries.")
                 with open(range_pdf, "rb") as f:
-                    st.download_button("📥 Download Range PDF", f, file_name=range_pdf)
+                    st.download_button("📥 Download History PDF", f, file_name=range_pdf)
             else:
-                st.error("No data found for these dates.")
+                st.error("No entries found for these dates.")
         else:
-            st.error("No Master Ledger found. Save today's data first!")
+            st.error("Master Excel file not found.")
