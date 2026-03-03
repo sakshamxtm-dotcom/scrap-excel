@@ -27,10 +27,10 @@ if not os.path.exists(SAVE_FOLDER):
 
 st.set_page_config(page_title="SCRAP MAIN SERVER", layout="wide", page_icon="🏢")
 
-# --- PARTY NAME PRESETS (Add your regular parties here) ---
+# --- PARTY NAME PRESETS ---
 PARTY_LIST = ["Select Party", "Ganesh Steel", "RK Industries", "Modern Scrap", "City Traders", "Other (Type Below)"]
 
-# --- PDF GENERATOR (LANDSCAPE) ---
+# --- PDF GENERATOR ---
 class SCRAP_PDF(FPDF):
     def header(self):
         self.set_fill_color(220, 220, 220)
@@ -73,7 +73,6 @@ def generate_full_pdf(df, date_label):
     pdf.output(f_name)
     return f_name
 
-# --- EMAIL LOGIC ---
 def send_email_with_pdf(file_path):
     try:
         msg = MIMEMultipart()
@@ -87,19 +86,15 @@ def send_email_with_pdf(file_path):
             encoders.encode_base64(p)
             p.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file_path)}")
             msg.attach(p)
-        s = smtplib.SMTP('smtp.gmail.com', 587)
-        s.starttls()
-        s.login(USER_EMAIL, APP_PASSWORD)
-        s.send_message(msg)
-        s.quit()
+        s = smtplib.SMTP('smtp.gmail.com', 587); s.starttls()
+        s.login(USER_EMAIL, APP_PASSWORD); s.send_message(msg); s.quit()
         return True
     except Exception as e:
-        st.error(f"Email Failed: {e}")
-        return False
+        st.error(f"Email Failed: {e}"); return False
 
-# --- UI APP ---
+# --- APP UI ---
 st.title("🏗️ SCRAP (Main Server)")
-st.write(f"Cloud Connected: **{USER_EMAIL}**")
+st.write(f"Server Active | Cloud: **{USER_EMAIL}**")
 
 # Entry Section
 with st.expander("📝 Data Entry Panel", expanded=True):
@@ -110,37 +105,44 @@ with st.expander("📝 Data Entry Panel", expanded=True):
         c1, c2, c3, c4 = st.columns(4)
         sel = c1.selectbox("Party", options=PARTY_LIST, key=f"s{i}")
         p_name = c1.text_input("New Party Name", key=f"t{i}") if sel in ["Select Party", "Other (Type Below)"] else sel
-        loc, v_no, rev = c2.text_input("Location", key=f"l{i}"), c3.text_input("Vehicle No", key=f"v{i}"), c4.number_input("Revenue", key=f"r{i}")
+        loc, v_no, rev = c2.text_input("Location", key=f"l{i}"), c3.text_input("Vehicle No", key=f"v{i}"), c4.number_input("Revenue", value=None, key=f"r{i}")
         
         c5, c6, c7, c8 = st.columns(4)
-        wq, gq, pr, mr = c5.number_input("White Qty", key=f"w{i}"), c6.number_input("Green Qty", key=f"g{i}"), c7.number_input("P. Rate", key=f"pr{i}"), c8.number_input("M. Rate", key=f"mr{i}")
+        wq, gq, pr, mr = c5.number_input("White Qty", value=None, key=f"w{i}"), c6.number_input("Green Qty", value=None, key=f"g{i}"), c7.number_input("P. Rate", value=None, key=f"pr{i}"), c8.number_input("M. Rate", value=None, key=f"mr{i}")
         
         c9, c10, c11 = st.columns(3)
-        rep, pur, ch = c9.number_input("Report", key=f"rp{i}"), c10.number_input("Purchase", key=f"pu{i}"), c11.number_input("Charge", key=f"ch{i}")
+        rep, pur, ch = c9.number_input("Report", value=None, key=f"rp{i}"), c10.number_input("Purchase", value=None, key=f"pu{i}"), c11.number_input("Charge", value=None, key=f"ch{i}")
         
-        sav = (pur - rep - ch) + (rev * 0.36)
-        curr_data.append({"Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name, "Location": loc, "Vehicle No": v_no, "Revenue": rev, "White Scrap (Qty)": wq, "Green Scrap (Qty)": gq, "Party Rate": pr, "Mill Rate": mr, "Report": rep, "Purchase": pur, "Vehicle Charge": ch, "Total Saving": sav})
+        # Calculation (Safe handling of None values)
+        sav = ((pur or 0) - (rep or 0) - (ch or 0)) + ((rev or 0) * 0.36)
+        curr_data.append({"Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name, "Location": loc, "Vehicle No": v_no, "Revenue": (rev or 0), "White Scrap (Qty)": (wq or 0), "Green Scrap (Qty)": (gq or 0), "Party Rate": (pr or 0), "Mill Rate": (mr or 0), "Report": (rep or 0), "Purchase": (pur or 0), "Vehicle Charge": (ch or 0), "Total Saving": sav})
 
 # Action Buttons
 st.divider()
 b1, b2 = st.columns(2)
 with b1:
-    if st.button("🚀 SYNC TODAY'S DATA", use_container_width=True, type="primary"):
+    st.subheader("📊 Today's Actions")
+    if st.button("🚀 SYNC & EMAIL TODAY'S DATA", use_container_width=True, type="primary"):
         df = pd.DataFrame(curr_data)
         if os.path.exists(FULL_MASTER_PATH):
             df = pd.concat([pd.read_excel(FULL_MASTER_PATH), df], ignore_index=True)
         df.to_excel(FULL_MASTER_PATH, index=False)
-        pdf = generate_full_pdf(pd.DataFrame(curr_data), date.today().strftime("%d-%m-%Y"))
-        if send_email_with_pdf(pdf):
-            st.success("Synced & Emailed!")
-            with open(pdf, "rb") as f: st.download_button("📥 Download Today's PDF", f, file_name=pdf)
+        pdf_path = generate_full_pdf(pd.DataFrame(curr_data), date.today().strftime("%d-%m-%Y"))
+        if send_email_with_pdf(pdf_path):
+            st.success("Synced to Server & Emailed!")
+            st.balloons()
+            
+    # Dedicated Download Button for Today's PDF
+    if st.button("📄 Generate Today's PDF (Preview/Download)", use_container_width=True):
+        today_pdf = generate_full_pdf(pd.DataFrame(curr_data), f"Today_{date.today().strftime('%d-%m-%Y')}")
+        with open(today_pdf, "rb") as f:
+            st.download_button("📥 Click here to Download Today's PDF", f, file_name=today_pdf, use_container_width=True)
 
 with b2:
-    st.markdown("### 🔍 Historical Tools")
+    st.subheader("🔍 Historical Tools")
     d1, d2 = st.date_input("Start", value=date.today()), st.date_input("End", value=date.today())
-    sub_col1, sub_col2 = st.columns(2)
-    
-    if sub_col1.button("📑 Range PDF", use_container_width=True):
+    sc1, sc2 = st.columns(2)
+    if sc1.button("📑 Range PDF", use_container_width=True):
         if os.path.exists(FULL_MASTER_PATH):
             mdf = pd.read_excel(FULL_MASTER_PATH)
             mdf['P'] = pd.to_datetime(mdf['Date'], format='%d/%m/%Y').dt.date
@@ -149,9 +151,6 @@ with b2:
                 rpdf = generate_full_pdf(fdf, f"{d1}_to_{d2}")
                 with open(rpdf, "rb") as f: st.download_button("📥 Download Range PDF", f, file_name=rpdf)
             else: st.error("No data found.")
-            
-    if sub_col2.button("📊 Master Excel", use_container_width=True):
+    if sc2.button("📊 Master Excel", use_container_width=True):
         if os.path.exists(FULL_MASTER_PATH):
-            with open(FULL_MASTER_PATH, "rb") as f:
-                st.download_button("📥 Download Monthly Excel", f, file_name=MASTER_FILE)
-        else: st.error("No Master File found yet.")
+            with open(FULL_MASTER_PATH, "rb") as f: st.download_button("📥 Download Monthly Excel", f, file_name=MASTER_FILE)
