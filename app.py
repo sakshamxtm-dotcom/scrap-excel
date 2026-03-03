@@ -18,10 +18,9 @@ FULL_MASTER_PATH = os.path.join(SAVE_FOLDER, MASTER_FILE)
 if not os.path.exists(SAVE_FOLDER):
     os.makedirs(SAVE_FOLDER)
 
-# FORCE WIDE MODE
 st.set_page_config(page_title="SCRAP MAIN SERVER", layout="wide", page_icon="🏢")
 
-# --- PDF ENGINE ---
+# --- PDF ENGINE (FIXED HEADERS) ---
 try:
     from fpdf import FPDF
 except ImportError:
@@ -29,26 +28,44 @@ except ImportError:
 
 class SCRAP_PDF(FPDF):
     def header(self):
-        self.set_fill_color(220, 220, 220)
+        # Header Box
+        self.set_fill_color(230, 230, 230) # Light Grey Fill
+        self.set_text_color(0, 0, 0)       # Black Text
         self.set_font('Arial', 'B', 18)
         self.cell(0, 15, 'SCRAP (Main Server)', 1, 1, 'C', 1)
+        self.set_font('Arial', 'I', 10)
+        self.cell(0, 8, f'Official Ledger | {datetime.now().strftime("%d/%m/%Y")}', 0, 1, 'C')
         self.ln(5)
 
 def generate_report(df, label):
     pdf = SCRAP_PDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 7)
-    cols = {"Date": 22, "Vehicle": 28, "Party": 35, "Location": 25, "W.Qty": 18, "G.Qty": 18, "P.Rate": 18, "M.Rate": 18, "Report": 22, "Purch": 22, "Saving": 28}
+    
+    # --- TABLE HEADER FIX ---
+    pdf.set_font("Arial", 'B', 8)
+    pdf.set_fill_color(240, 240, 240) # Very light grey for headers
+    pdf.set_text_color(0, 0, 0)       # Force Black Text
+    
+    cols = {
+        "Date": 22, "Vehicle": 28, "Party": 40, "Location": 25, 
+        "W.Qty": 18, "G.Qty": 18, "P.Rate": 18, "M.Rate": 18, 
+        "Report": 22, "Purch": 22, "Saving": 28
+    }
+    
     for title, width in cols.items():
-        pdf.cell(width, 10, title, 1, 0, 'C', 1)
+        pdf.cell(width, 10, title, 1, 0, 'C', 1) # Fill = 1
     pdf.ln()
+    
+    # --- DATA ROWS ---
     pdf.set_font("Arial", '', 7)
+    pdf.set_text_color(0, 0, 0)
     total_sav = 0
+    
     for _, row in df.iterrows():
         d_str = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%d/%m/%Y')
         pdf.cell(cols["Date"], 10, d_str, 1)
         pdf.cell(cols["Vehicle"], 10, str(row['Vehicle No']), 1)
-        pdf.cell(cols["Party"], 10, str(row['Party Name']), 1)
+        pdf.cell(cols["Party"], 10, str(row['Party Name'])[:25], 1) # Trim long names
         pdf.cell(cols["Location"], 10, str(row['Location']), 1)
         pdf.cell(cols["W.Qty"], 10, str(row['White Scrap (Qty)']), 1)
         pdf.cell(cols["G.Qty"], 10, str(row['Green Scrap (Qty)']), 1)
@@ -60,8 +77,11 @@ def generate_report(df, label):
         pdf.cell(cols["Saving"], 10, f"{s_val:,.2f}", 1)
         total_sav += s_val
         pdf.ln()
+        
     pdf.ln(5)
-    pdf.set_font('Arial', 'B', 11); pdf.cell(0, 10, f"TOTAL NET SAVING: INR {total_sav:,.2f}", 0, 1, 'R')
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(0, 10, f"TOTAL NET SAVING: INR {total_sav:,.2f}", 0, 1, 'R')
+    
     fn = f"SCRAP_Report_{label.replace('/','-')}.pdf"
     pdf.output(fn)
     return fn
@@ -72,7 +92,7 @@ def send_to_server(file_path):
         msg = MIMEMultipart()
         msg['From'], msg['To'] = USER_EMAIL, USER_EMAIL
         msg['Subject'] = f"SCRAP SYNC: {datetime.now().strftime('%d/%m/%Y')}"
-        msg.attach(MIMEText("SCRAP Main Server Data.", 'plain'))
+        msg.attach(MIMEText("SCRAP Main Server Data Sync.", 'plain'))
         with open(file_path, "rb") as f:
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(f.read())
@@ -96,25 +116,22 @@ if 'rows' not in st.session_state:
 daily_cache = []
 PARTY_LIST = ["Select Party", "Ganesh Steel", "RK Industries", "Modern Scrap", "City Traders", "Other (Type Below)"]
 
-# DYNAMIC ENTRY LOOP (WIDE LAYOUT)
+# DYNAMIC ENTRY LOOP (FULL SCREEN WIDTH)
 for i in st.session_state.rows:
     st.subheader(f"🚛 Vehicle Entry #{i+1}")
     
-    # row 1: Identification - 2 wide columns
     r1c1, r1c2 = st.columns(2)
     sel_p = r1c1.selectbox("Party Selection", options=PARTY_LIST, key=f"sp_{i}")
     p_name = r1c1.text_input("Manual Party Name", value="" if sel_p == "Select Party" else (sel_p if sel_p != "Other (Type Below)" else ""), key=f"mn_{i}")
     loc = r1c2.text_input("Location", key=f"lc_{i}")
     v_no = r1c2.text_input("Vehicle No", key=f"vn_{i}")
     
-    # row 2: Weights & Rates - 4 medium columns
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
     wq = r2c1.number_input("White Qty", value=None, key=f"wq_{i}")
     gq = r2c2.number_input("Green Qty", value=None, key=f"gq_{i}")
     pr = r2c3.number_input("Party Rate", value=None, key=f"pr_{i}")
     mr = r2c4.number_input("Mill Rate", value=None, key=f"mr_{i}")
     
-    # row 3: Finance & GST - 4 medium columns
     r3c1, r3c2, r3c3, r3c4, r3c5 = st.columns(5)
     rev = r3c1.number_input("Total Revenue", value=None, key=f"rv_{i}")
     rep = r3c2.number_input("Report Amount", value=None, key=f"rp_{i}")
@@ -124,7 +141,7 @@ for i in st.session_state.rows:
     gst_p = r3c5.number_input("GST Purchase %", value=5.0, key=f"gp_{i}")
     gst_s = r3c5.number_input("GST Sale %", value=18.0, key=f"gs_{i}")
 
-    # Calculation
+    # Calculation: (P - R - C) + (Rev * GP%) + (Rev * GS%)
     r_v, p_v, rep_v, c_v = (rev or 0.0), (pur or 0.0), (rep or 0.0), (ch or 0.0)
     saving = (p_v - rep_v - c_v) + (r_v * (gst_p/100)) + (r_v * (gst_s/100))
     
@@ -141,7 +158,7 @@ for i in st.session_state.rows:
 if st.button("➕ Add Next Vehicle", use_container_width=True):
     st.session_state.rows.append(len(st.session_state.rows)); st.rerun()
 
-# ACTION TABS (FULL WIDTH)
+# ACTION TABS
 st.divider()
 tab1, tab2, tab3 = st.tabs(["🚀 Today's Sync", "📑 Range PDF Search", "📊 Master Database"])
 
@@ -156,6 +173,10 @@ with tab1:
         if ok: st.success("Synced & Emailed!"); st.balloons()
         else: st.error(f"Email Failed: {msg}")
 
+    if st.button("📄 Download Today's PDF", use_container_width=True):
+        pdf = generate_report(pd.DataFrame(daily_cache), f"Today_{date.today()}")
+        with open(pdf, "rb") as f: st.download_button("📥 Click to Download PDF", f, file_name=pdf, use_container_width=True)
+
 with tab2:
     sd, ed = st.date_input("From", value=date.today()), st.date_input("To", value=date.today())
     if st.button("🔎 Generate Range Report", use_container_width=True):
@@ -164,8 +185,8 @@ with tab2:
             mdf['Parsed'] = pd.to_datetime(mdf['Date'], format='%d/%m/%Y').dt.date
             fdf = mdf[(mdf['Parsed'] >= sd) & (mdf['Parsed'] <= ed)].drop(columns=['Parsed'])
             if not fdf.empty:
-                r_pdf = generate_report(fdf, f"{sd}_to_{ed}")
-                with open(r_pdf, "rb") as f: st.download_button("📥 Download PDF", f, file_name=r_pdf, use_container_width=True)
+                r_pdf = generate_report(fdf, f"Range_{sd}_to_{ed}")
+                with open(r_pdf, "rb") as f: st.download_button("📥 Download Range PDF", f, file_name=r_pdf, use_container_width=True)
 
 with tab3:
     if st.button("📥 Download Master.xlsx", use_container_width=True):
