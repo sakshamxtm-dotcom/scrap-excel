@@ -45,7 +45,6 @@ def generate_pro_pdf(df, date_label):
     pdf.add_page()
     pdf.set_font("Arial", 'B', 7)
     
-    # Precise Column Definitions
     cols = {
         "Date": 22, "Vehicle": 28, "Party": 35, "Location": 25, 
         "W.Qty": 18, "G.Qty": 18, "P.Rate": 18, "M.Rate": 18,
@@ -104,16 +103,14 @@ def send_secure_email(file_path):
         st.error(f"Mail Delivery Failed: {e}"); return False
 
 # --- UI LOGIC ---
-st.title("🏗️ SCRAP (Main Server)")
-st.info(f"Target Sync: {USER_EMAIL} | Mode: Secure Professional")
-
 if 'entries' not in st.session_state:
     st.session_state.entries = [0]
 
 def add_vehicle_row():
     st.session_state.entries.append(len(st.session_state.entries))
 
-# Main Input Loop
+st.title("🏗️ SCRAP (Main Server)")
+
 processed_rows = []
 for i in st.session_state.entries:
     with st.expander(f"🚛 Vehicle Entry #{i+1}", expanded=True):
@@ -129,17 +126,23 @@ for i in st.session_state.entries:
         c9, c10, c11 = st.columns(3)
         rep, pur, ch = c9.number_input("Report Amount", value=None, key=f"rep_{i}"), c10.number_input("Purchase Amount", value=None, key=f"pur_{i}"), c11.number_input("Vehicle Charge", value=None, key=f"ch_{i}")
 
-        # --- GST CALCULATION (Purchase - Report - Charge) + (18% In + 18% Out) ---
-        # Formula: (P - R - C) + (Revenue * 0.36)
+        # --- DYNAMIC GST INPUTS ---
+        cg1, cg2 = st.columns(2)
+        gst_p_pct = cg1.number_input("GST Purchase %", value=5.0, key=f"gp_pct_{i}")
+        gst_s_pct = cg2.number_input("GST Sale %", value=18.0, key=f"gs_pct_{i}")
+
+        # --- GST CALCULATION ---
         revenue_val = rev if rev else 0.0
         purchase_val = pur if pur else 0.0
         report_val = rep if rep else 0.0
         charge_val = ch if ch else 0.0
         
-        gst_component = revenue_val * 0.36  # Combined 18% + 18%
-        net_saving = (purchase_val - report_val - charge_val) + gst_component
+        gst_p_amt = revenue_val * (gst_p_pct / 100)
+        gst_s_amt = revenue_val * (gst_s_pct / 100)
         
-        st.success(f"Calculated Saving: ₹ {net_saving:,.2f} (Includes 36% GST on Revenue)")
+        net_saving = (purchase_val - report_val - charge_val) + gst_p_amt + gst_s_amt
+        
+        st.success(f"Calculated Saving: ₹ {net_saving:,.2f}")
         
         processed_rows.append({
             "Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name, "Location": loc,
@@ -164,23 +167,10 @@ with col_sync:
         df_final.to_excel(FULL_MASTER_PATH, index=False)
         pdf_path = generate_pro_pdf(pd.DataFrame(processed_rows), date.today().strftime("%d-%m-%Y"))
         if send_secure_email(pdf_path):
-            st.toast("Success: Server Updated & Email Sent!", icon="✅")
-            st.balloons()
+            st.toast("Success: Server Updated!", icon="✅")
 
 with col_pdf:
     if st.button("📄 Generate Today's PDF", use_container_width=True):
         today_pdf = generate_pro_pdf(pd.DataFrame(processed_rows), f"Today_{date.today().strftime('%d-%m-%Y')}")
         with open(today_pdf, "rb") as f:
             st.download_button("📥 Click to Download PDF", f, file_name=today_pdf, use_container_width=True)
-
-# Historical Tools Remains Operational
-with st.expander("🔍 Historical Server Search"):
-    d_start, d_end = st.date_input("Start Date", value=date.today()), st.date_input("End Date", value=date.today())
-    if st.button("🔎 Generate Range PDF", use_container_width=True):
-        if os.path.exists(FULL_MASTER_PATH):
-            mdf = pd.read_excel(FULL_MASTER_PATH)
-            mdf['P'] = pd.to_datetime(mdf['Date'], format='%d/%m/%Y').dt.date
-            fdf = mdf[(mdf['P'] >= d_start) & (mdf['P'] <= d_end)].drop(columns=['P'])
-            if not fdf.empty:
-                rpdf = generate_pro_pdf(fdf, f"Range_{d_start}_to_{d_end}")
-                with open(rpdf, "rb") as f: st.download_button("📥 Download History PDF", f, file_name=rpdf)
