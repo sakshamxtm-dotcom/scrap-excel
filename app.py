@@ -92,30 +92,55 @@ def send_email_with_pdf(file_path):
     except Exception as e:
         st.error(f"Email Failed: {e}"); return False
 
+# --- SESSION STATE FOR DYNAMIC ROWS ---
+if 'vehicle_rows' not in st.session_state:
+    st.session_state.vehicle_rows = [0] # Start with one row index
+
+def add_vehicle():
+    st.session_state.vehicle_rows.append(len(st.session_state.vehicle_rows))
+
 # --- APP UI ---
 st.title("🏗️ SCRAP (Main Server)")
-st.write(f"Server Active | Cloud: **{USER_EMAIL}**")
+st.write(f"Logged: **{USER_EMAIL}** | Date: **{date.today().strftime('%d/%m/%Y')}**")
 
-# Entry Section
-with st.expander("📝 Data Entry Panel", expanded=True):
-    num_v = st.number_input("Vehicles to enter", min_value=1, step=1)
-    curr_data = []
-    for i in range(num_v):
-        st.markdown(f"**Vehicle #{i+1}**")
-        c1, c2, c3, c4 = st.columns(4)
-        sel = c1.selectbox("Party", options=PARTY_LIST, key=f"s{i}")
-        p_name = c1.text_input("New Party Name", key=f"t{i}") if sel in ["Select Party", "Other (Type Below)"] else sel
-        loc, v_no, rev = c2.text_input("Location", key=f"l{i}"), c3.text_input("Vehicle No", key=f"v{i}"), c4.number_input("Revenue", value=None, key=f"r{i}")
-        
-        c5, c6, c7, c8 = st.columns(4)
-        wq, gq, pr, mr = c5.number_input("White Qty", value=None, key=f"w{i}"), c6.number_input("Green Qty", value=None, key=f"g{i}"), c7.number_input("P. Rate", value=None, key=f"pr{i}"), c8.number_input("M. Rate", value=None, key=f"mr{i}")
-        
-        c9, c10, c11 = st.columns(3)
-        rep, pur, ch = c9.number_input("Report", value=None, key=f"rp{i}"), c10.number_input("Purchase", value=None, key=f"pu{i}"), c11.number_input("Charge", value=None, key=f"ch{i}")
-        
-        # Calculation (Safe handling of None values)
-        sav = ((pur or 0) - (rep or 0) - (ch or 0)) + ((rev or 0) * 0.36)
-        curr_data.append({"Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name, "Location": loc, "Vehicle No": v_no, "Revenue": (rev or 0), "White Scrap (Qty)": (wq or 0), "Green Scrap (Qty)": (gq or 0), "Party Rate": (pr or 0), "Mill Rate": (mr or 0), "Report": (rep or 0), "Purchase": (pur or 0), "Vehicle Charge": (ch or 0), "Total Saving": sav})
+curr_data = []
+
+# Dynamic Entry Panel
+with st.container():
+    for i in st.session_state.vehicle_rows:
+        with st.expander(f"🚛 Vehicle Entry #{i+1}", expanded=True):
+            c1, c2, c3, c4 = st.columns(4)
+            sel = c1.selectbox("Party", options=PARTY_LIST, key=f"sel_{i}")
+            p_name = c1.text_input("New Party Name", key=f"pname_{i}") if sel in ["Select Party", "Other (Type Below)"] else sel
+            loc = c2.text_input("Location", key=f"loc_{i}")
+            v_no = c3.text_input("Vehicle No", key=f"vno_{i}")
+            rev = c4.number_input("Total Revenue", value=None, key=f"rev_{i}")
+            
+            c5, c6, c7, c8 = st.columns(4)
+            wq = c5.number_input("White Qty", value=None, key=f"wq_{i}")
+            gq = c6.number_input("Green Qty", value=None, key=f"gq_{i}")
+            pr = c7.number_input("Party Rate", value=None, key=f"pr_{i}")
+            mr = c8.number_input("Mill Rate", value=None, key=f"mr_{i}")
+            
+            c9, c10, c11 = st.columns(3)
+            rep = c9.number_input("Report", value=None, key=f"rep_{i}")
+            pur = c10.number_input("Purchase", value=None, key=f"pur_{i}")
+            ch = c11.number_input("Charge", value=None, key=f"ch_{i}")
+            
+            sav = ((pur or 0) - (rep or 0) - (ch or 0)) + ((rev or 0) * 0.36)
+            
+            curr_data.append({
+                "Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name, 
+                "Location": loc, "Vehicle No": v_no, "Revenue": (rev or 0), 
+                "White Scrap (Qty)": (wq or 0), "Green Scrap (Qty)": (gq or 0), 
+                "Party Rate": (pr or 0), "Mill Rate": (mr or 0), 
+                "Report": (rep or 0), "Purchase": (pur or 0), 
+                "Vehicle Charge": (ch or 0), "Total Saving": sav
+            })
+
+    if st.button("➕ Add Next Vehicle", use_container_width=True):
+        add_vehicle()
+        st.rerun()
 
 # Action Buttons
 st.divider()
@@ -123,20 +148,19 @@ b1, b2 = st.columns(2)
 with b1:
     st.subheader("📊 Today's Actions")
     if st.button("🚀 SYNC & EMAIL TODAY'S DATA", use_container_width=True, type="primary"):
-        df = pd.DataFrame(curr_data)
+        df_today = pd.DataFrame(curr_data)
         if os.path.exists(FULL_MASTER_PATH):
-            df = pd.concat([pd.read_excel(FULL_MASTER_PATH), df], ignore_index=True)
-        df.to_excel(FULL_MASTER_PATH, index=False)
+            df_today = pd.concat([pd.read_excel(FULL_MASTER_PATH), df_today], ignore_index=True)
+        df_today.to_excel(FULL_MASTER_PATH, index=False)
         pdf_path = generate_full_pdf(pd.DataFrame(curr_data), date.today().strftime("%d-%m-%Y"))
         if send_email_with_pdf(pdf_path):
             st.success("Synced to Server & Emailed!")
             st.balloons()
             
-    # Dedicated Download Button for Today's PDF
-    if st.button("📄 Generate Today's PDF (Preview/Download)", use_container_width=True):
+    if st.button("📄 Generate Today's PDF", use_container_width=True):
         today_pdf = generate_full_pdf(pd.DataFrame(curr_data), f"Today_{date.today().strftime('%d-%m-%Y')}")
         with open(today_pdf, "rb") as f:
-            st.download_button("📥 Click here to Download Today's PDF", f, file_name=today_pdf, use_container_width=True)
+            st.download_button("📥 Download Today's PDF", f, file_name=today_pdf, use_container_width=True)
 
 with b2:
     st.subheader("🔍 Historical Tools")
@@ -150,7 +174,6 @@ with b2:
             if not fdf.empty:
                 rpdf = generate_full_pdf(fdf, f"{d1}_to_{d2}")
                 with open(rpdf, "rb") as f: st.download_button("📥 Download Range PDF", f, file_name=rpdf)
-            else: st.error("No data found.")
     if sc2.button("📊 Master Excel", use_container_width=True):
         if os.path.exists(FULL_MASTER_PATH):
             with open(FULL_MASTER_PATH, "rb") as f: st.download_button("📥 Download Monthly Excel", f, file_name=MASTER_FILE)
