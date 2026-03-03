@@ -19,60 +19,57 @@ USER_EMAIL = "saksham.xtm@gmail.com"
 APP_PASSWORD = "up78ex2121" 
 
 SAVE_FOLDER = "scrap_data_logs" 
-# Filename remains monthly but internal dates are dd/mm/yyyy
 MASTER_FILE = f"SCRAP_Master_{datetime.now().strftime('%m_%Y')}.xlsx"
+FULL_MASTER_PATH = os.path.join(SAVE_FOLDER, MASTER_FILE)
 
 if not os.path.exists(SAVE_FOLDER):
     os.makedirs(SAVE_FOLDER)
 
 st.set_page_config(page_title="SCRAP MAIN SERVER", layout="wide", page_icon="🏢")
 
-# --- PDF GENERATOR (MAIN SERVER BRANDING) ---
+# --- PARTY NAME PRESETS (Add your regular parties here) ---
+PARTY_LIST = ["Select Party", "Ganesh Steel", "RK Industries", "Modern Scrap", "City Traders", "Other (Type Below)"]
+
+# --- PDF GENERATOR (LANDSCAPE) ---
 class SCRAP_PDF(FPDF):
     def header(self):
-        self.set_fill_color(230, 230, 230)
+        self.set_fill_color(220, 220, 220)
         self.set_font('Arial', 'B', 18)
         self.cell(0, 15, 'SCRAP (Main Server)', 1, 1, 'C', 1)
         self.set_font('Arial', 'I', 10)
-        # Header Date Format Updated
-        self.cell(0, 8, f'Official Transaction Ledger | Generated: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
-        self.ln(10)
+        self.cell(0, 8, f'Official Ledger | {datetime.now().strftime("%d/%m/%Y")}', 0, 1, 'C')
+        self.ln(5)
 
-def generate_custom_pdf(df, date_label):
+def generate_full_pdf(df, date_label):
     pdf = SCRAP_PDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    
-    pdf.set_font("Arial", 'B', 8)
-    # Date column width set for dd/mm/yyyy
-    cols = {"Date": 25, "Vehicle": 35, "Party": 45, "Revenue": 30, "Purch": 30, "Report": 30, "Charge": 25, "Saving": 40}
-    
+    pdf.set_font("Arial", 'B', 7)
+    cols = {"Date": 22, "Vehicle": 28, "Party": 35, "Location": 25, "W.Qty": 18, "G.Qty": 18, "P.Rate": 18, "M.Rate": 18, "Report": 22, "Purch": 22, "Saving": 28}
     for title, width in cols.items():
         pdf.cell(width, 10, title, 1, 0, 'C', 1)
     pdf.ln()
-
-    pdf.set_font("Arial", '', 8)
+    pdf.set_font("Arial", '', 7)
     total_sav = 0
     for _, row in df.iterrows():
-        # Ensure row date is formatted correctly in PDF
-        display_date = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%d/%m/%Y')
-        
-        pdf.cell(cols["Date"], 10, display_date, 1)
+        d = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%d/%m/%Y')
+        pdf.cell(cols["Date"], 10, d, 1)
         pdf.cell(cols["Vehicle"], 10, str(row['Vehicle No']), 1)
         pdf.cell(cols["Party"], 10, str(row['Party Name']), 1)
-        pdf.cell(cols["Revenue"], 10, f"{row['Revenue']:,.2f}", 1)
-        pdf.cell(cols["Purch"], 10, f"{row['Purchase']:,.2f}", 1)
-        pdf.cell(cols["Report"], 10, f"{row['Report']:,.2f}", 1)
-        pdf.cell(cols["Charge"], 10, f"{row['Vehicle Charge']:,.2f}", 1)
-        save_val = float(row['Total Saving'])
-        pdf.cell(cols["Saving"], 10, f"{save_val:,.2f}", 1)
-        total_sav += save_val
+        pdf.cell(cols["Location"], 10, str(row['Location']), 1)
+        pdf.cell(cols["W.Qty"], 10, str(row['White Scrap (Qty)']), 1)
+        pdf.cell(cols["G.Qty"], 10, str(row['Green Scrap (Qty)']), 1)
+        pdf.cell(cols["P.Rate"], 10, str(row['Party Rate']), 1)
+        pdf.cell(cols["M.Rate"], 10, str(row['Mill Rate']), 1)
+        pdf.cell(cols["Report"], 10, f"{row['Report']:,.0f}", 1)
+        pdf.cell(cols["Purch"], 10, f"{row['Purchase']:,.0f}", 1)
+        s = float(row['Total Saving'])
+        pdf.cell(cols["Saving"], 10, f"{s:,.2f}", 1)
+        total_sav += s
         pdf.ln()
-
     pdf.ln(5)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, f"TOTAL SAVING: INR {total_sav:,.2f}", 0, 1, 'R')
-    
-    f_name = f"SCRAP_Report_{date_label.replace('/','-')}.pdf"
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 10, f"TOTAL NET SAVING: INR {total_sav:,.2f}", 0, 1, 'R')
+    f_name = f"SCRAP_Full_Report_{date_label.replace('/','-')}.pdf"
     pdf.output(f_name)
     return f_name
 
@@ -83,100 +80,78 @@ def send_email_with_pdf(file_path):
         msg['From'] = USER_EMAIL
         msg['To'] = USER_EMAIL
         msg['Subject'] = f"SCRAP SERVER REPORT - {datetime.now().strftime('%d/%m/%Y')}"
-        msg.attach(MIMEText("Attached is the SCRAP (Main Server) PDF report.", 'plain'))
-        
-        with open(file_path, "rb") as attachment:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file_path)}")
-            msg.attach(part)
-        
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(USER_EMAIL, APP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        msg.attach(MIMEText("SCRAP (Main Server) Update attached.", 'plain'))
+        with open(file_path, "rb") as a:
+            p = MIMEBase('application', 'octet-stream')
+            p.set_payload(a.read())
+            encoders.encode_base64(p)
+            p.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file_path)}")
+            msg.attach(p)
+        s = smtplib.SMTP('smtp.gmail.com', 587)
+        s.starttls()
+        s.login(USER_EMAIL, APP_PASSWORD)
+        s.send_message(msg)
+        s.quit()
         return True
     except Exception as e:
-        st.error(f"Mail Server Error: {e}")
+        st.error(f"Email Failed: {e}")
         return False
 
-# --- APP UI ---
+# --- UI APP ---
 st.title("🏗️ SCRAP (Main Server)")
-st.write(f"Server Active | Date Format: **DD/MM/YYYY**")
+st.write(f"Cloud Connected: **{USER_EMAIL}**")
 
-# --- DATA ENTRY ---
-if 'rows' not in st.session_state:
-    st.session_state.rows = []
-
-with st.expander("📝 Enter New Vehicle Data", expanded=True):
-    num_v = st.number_input("Number of vehicles", min_value=1, step=1, value=1)
-    
-    current_entries = []
+# Entry Section
+with st.expander("📝 Data Entry Panel", expanded=True):
+    num_v = st.number_input("Vehicles to enter", min_value=1, step=1)
+    curr_data = []
     for i in range(num_v):
-        st.markdown(f"**Vehicle Row #{i+1}**")
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
-        p_name = c1.text_input("Party", key=f"p{i}")
-        v_no = c2.text_input("Vehicle No", key=f"v{i}")
-        rev = c3.number_input("Revenue", key=f"r{i}")
-        pur = c4.number_input("Purchase", key=f"pur{i}")
-        rep = c5.number_input("Report", key=f"rep{i}")
-        chrg = c6.number_input("Charge", key=f"ch{i}")
+        st.markdown(f"**Vehicle #{i+1}**")
+        c1, c2, c3, c4 = st.columns(4)
+        sel = c1.selectbox("Party", options=PARTY_LIST, key=f"s{i}")
+        p_name = c1.text_input("New Party Name", key=f"t{i}") if sel in ["Select Party", "Other (Type Below)"] else sel
+        loc, v_no, rev = c2.text_input("Location", key=f"l{i}"), c3.text_input("Vehicle No", key=f"v{i}"), c4.number_input("Revenue", key=f"r{i}")
         
-        # Calculation Logic (Revenue * 0.36 + Profit from transaction)
-        saving = (pur - rep - chrg) + (rev * 0.36)
+        c5, c6, c7, c8 = st.columns(4)
+        wq, gq, pr, mr = c5.number_input("White Qty", key=f"w{i}"), c6.number_input("Green Qty", key=f"g{i}"), c7.number_input("P. Rate", key=f"pr{i}"), c8.number_input("M. Rate", key=f"mr{i}")
         
-        current_entries.append({
-            "Date": date.today().strftime("%d/%m/%Y"), # SETTING THE DD/MM/YYYY FORMAT
-            "Party Name": p_name, "Vehicle No": v_no, "Revenue": rev,
-            "Purchase": pur, "Report": rep, "Vehicle Charge": chrg, "Total Saving": saving
-        })
+        c9, c10, c11 = st.columns(3)
+        rep, pur, ch = c9.number_input("Report", key=f"rp{i}"), c10.number_input("Purchase", key=f"pu{i}"), c11.number_input("Charge", key=f"ch{i}")
+        
+        sav = (pur - rep - ch) + (rev * 0.36)
+        curr_data.append({"Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name, "Location": loc, "Vehicle No": v_no, "Revenue": rev, "White Scrap (Qty)": wq, "Green Scrap (Qty)": gq, "Party Rate": pr, "Mill Rate": mr, "Report": rep, "Purchase": pur, "Vehicle Charge": ch, "Total Saving": sav})
 
-# --- PDF ACTION BUTTONS ---
-st.write("---")
-col_today, col_range = st.columns(2)
+# Action Buttons
+st.divider()
+b1, b2 = st.columns(2)
+with b1:
+    if st.button("🚀 SYNC TODAY'S DATA", use_container_width=True, type="primary"):
+        df = pd.DataFrame(curr_data)
+        if os.path.exists(FULL_MASTER_PATH):
+            df = pd.concat([pd.read_excel(FULL_MASTER_PATH), df], ignore_index=True)
+        df.to_excel(FULL_MASTER_PATH, index=False)
+        pdf = generate_full_pdf(pd.DataFrame(curr_data), date.today().strftime("%d-%m-%Y"))
+        if send_email_with_pdf(pdf):
+            st.success("Synced & Emailed!")
+            with open(pdf, "rb") as f: st.download_button("📥 Download Today's PDF", f, file_name=pdf)
 
-with col_today:
-    st.subheader("📅 Today's Report")
-    if st.button("🚀 Sync to Excel & Email Today's PDF", use_container_width=True):
-        today_df = pd.DataFrame(current_entries)
-        
-        # Update Master Excel
-        path = os.path.join(SAVE_FOLDER, MASTER_FILE)
-        if os.path.exists(path):
-            old_df = pd.read_excel(path)
-            today_df = pd.concat([old_df, today_df], ignore_index=True)
-        today_df.to_excel(path, index=False)
-        
-        # Generate and Send PDF
-        pdf_file = generate_custom_pdf(pd.DataFrame(current_entries), date.today().strftime("%d-%m-%Y"))
-        if send_email_with_pdf(pdf_file):
-            st.success(f"Emailed to saksham.xtm@gmail.com")
-            st.balloons()
-            with open(pdf_file, "rb") as f:
-                st.download_button("📥 Download PDF", f, file_name=pdf_file)
-
-with col_range:
-    st.subheader("🔍 Search by Date Range")
-    d1 = st.date_input("From Date", value=date.today())
-    d2 = st.date_input("To Date", value=date.today())
+with b2:
+    st.markdown("### 🔍 Historical Tools")
+    d1, d2 = st.date_input("Start", value=date.today()), st.date_input("End", value=date.today())
+    sub_col1, sub_col2 = st.columns(2)
     
-    if st.button("🔎 Generate Range PDF", use_container_width=True):
-        path = os.path.join(SAVE_FOLDER, MASTER_FILE)
-        if os.path.exists(path):
-            master_df = pd.read_excel(path)
-            # Convert string dates in excel to datetime objects for filtering
-            master_df['ParsedDate'] = pd.to_datetime(master_df['Date'], format='%d/%m/%Y').dt.date
-            mask = (master_df['ParsedDate'] >= d1) & (master_df['ParsedDate'] <= d2)
-            filtered_df = master_df.loc[mask].drop(columns=['ParsedDate'])
+    if sub_col1.button("📑 Range PDF", use_container_width=True):
+        if os.path.exists(FULL_MASTER_PATH):
+            mdf = pd.read_excel(FULL_MASTER_PATH)
+            mdf['P'] = pd.to_datetime(mdf['Date'], format='%d/%m/%Y').dt.date
+            fdf = mdf[(mdf['P'] >= d1) & (mdf['P'] <= d2)].drop(columns=['P'])
+            if not fdf.empty:
+                rpdf = generate_full_pdf(fdf, f"{d1}_to_{d2}")
+                with open(rpdf, "rb") as f: st.download_button("📥 Download Range PDF", f, file_name=rpdf)
+            else: st.error("No data found.")
             
-            if not filtered_df.empty:
-                range_pdf = generate_custom_pdf(filtered_df, f"{d1.strftime('%d-%m-%Y')}_to_{d2.strftime('%d-%m-%Y')}")
-                st.success(f"Report Generated for {len(filtered_df)} entries.")
-                with open(range_pdf, "rb") as f:
-                    st.download_button("📥 Download History PDF", f, file_name=range_pdf)
-            else:
-                st.error("No entries found for these dates.")
-        else:
-            st.error("Master Excel file not found.")
+    if sub_col2.button("📊 Master Excel", use_container_width=True):
+        if os.path.exists(FULL_MASTER_PATH):
+            with open(FULL_MASTER_PATH, "rb") as f:
+                st.download_button("📥 Download Monthly Excel", f, file_name=MASTER_FILE)
+        else: st.error("No Master File found yet.")
