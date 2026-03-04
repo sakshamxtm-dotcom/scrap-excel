@@ -20,7 +20,7 @@ if not os.path.exists(SAVE_FOLDER):
 
 st.set_page_config(page_title="SCRAP MAIN SERVER", layout="wide", page_icon="🏢")
 
-# --- PDF ENGINE (FIXED HEADERS) ---
+# --- PDF ENGINE ---
 try:
     from fpdf import FPDF
 except ImportError:
@@ -28,9 +28,8 @@ except ImportError:
 
 class SCRAP_PDF(FPDF):
     def header(self):
-        # Header Box
-        self.set_fill_color(230, 230, 230) # Light Grey Fill
-        self.set_text_color(0, 0, 0)       # Black Text
+        self.set_fill_color(230, 230, 230) 
+        self.set_text_color(0, 0, 0)       
         self.set_font('Arial', 'B', 18)
         self.cell(0, 15, 'SCRAP (Main Server)', 1, 1, 'C', 1)
         self.set_font('Arial', 'I', 10)
@@ -40,11 +39,9 @@ class SCRAP_PDF(FPDF):
 def generate_report(df, label):
     pdf = SCRAP_PDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    
-    # --- TABLE HEADER FIX ---
     pdf.set_font("Arial", 'B', 8)
-    pdf.set_fill_color(240, 240, 240) # Very light grey for headers
-    pdf.set_text_color(0, 0, 0)       # Force Black Text
+    pdf.set_fill_color(240, 240, 240) 
+    pdf.set_text_color(0, 0, 0)       
     
     cols = {
         "Date": 22, "Vehicle": 28, "Party": 40, "Location": 25, 
@@ -53,10 +50,9 @@ def generate_report(df, label):
     }
     
     for title, width in cols.items():
-        pdf.cell(width, 10, title, 1, 0, 'C', 1) # Fill = 1
+        pdf.cell(width, 10, title, 1, 0, 'C', 1) 
     pdf.ln()
     
-    # --- DATA ROWS ---
     pdf.set_font("Arial", '', 7)
     pdf.set_text_color(0, 0, 0)
     total_sav = 0
@@ -65,7 +61,7 @@ def generate_report(df, label):
         d_str = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%d/%m/%Y')
         pdf.cell(cols["Date"], 10, d_str, 1)
         pdf.cell(cols["Vehicle"], 10, str(row['Vehicle No']), 1)
-        pdf.cell(cols["Party"], 10, str(row['Party Name'])[:25], 1) # Trim long names
+        pdf.cell(cols["Party"], 10, str(row['Party Name'])[:25], 1) 
         pdf.cell(cols["Location"], 10, str(row['Location']), 1)
         pdf.cell(cols["W.Qty"], 10, str(row['White Scrap (Qty)']), 1)
         pdf.cell(cols["G.Qty"], 10, str(row['Green Scrap (Qty)']), 1)
@@ -114,15 +110,14 @@ if 'rows' not in st.session_state:
     st.session_state.rows = [0]
 
 daily_cache = []
-PARTY_LIST = ["Select Party", "Ganesh Steel", "RK Industries", "Modern Scrap", "City Traders", "Other (Type Below)"]
 
-# DYNAMIC ENTRY LOOP (FULL SCREEN WIDTH)
+# DYNAMIC ENTRY LOOP
 for i in st.session_state.rows:
     st.subheader(f"🚛 Vehicle Entry #{i+1}")
     
     r1c1, r1c2 = st.columns(2)
-    sel_p = r1c1.selectbox("Party Selection", options=PARTY_LIST, key=f"sp_{i}")
-    p_name = r1c1.text_input("Manual Party Name", value="" if sel_p == "Select Party" else (sel_p if sel_p != "Other (Type Below)" else ""), key=f"mn_{i}")
+    # DROPDOWN REMOVED: Direct text input for Party Name
+    p_name = r1c1.text_input("Party Name", key=f"mn_{i}")
     loc = r1c2.text_input("Location", key=f"lc_{i}")
     v_no = r1c2.text_input("Vehicle No", key=f"vn_{i}")
     
@@ -141,11 +136,13 @@ for i in st.session_state.rows:
     gst_p = r3c5.number_input("GST Purchase %", value=5.0, key=f"gp_{i}")
     gst_s = r3c5.number_input("GST Sale %", value=18.0, key=f"gs_{i}")
 
-    # Calculation: (P - R - C) + (Rev * GP%) + (Rev * GS%)
+    # EXCLUSIVE CALCULATION: GST is added on top of the revenue
     r_v, p_v, rep_v, c_v = (rev or 0.0), (pur or 0.0), (rep or 0.0), (ch or 0.0)
+    
+    # Saving = (Purchase - Report - Charge) + (Revenue * Purchase GST%) + (Revenue * Sale GST%)
     saving = (p_v - rep_v - c_v) + (r_v * (gst_p/100)) + (r_v * (gst_s/100))
     
-    st.success(f"Calculated Saving: ₹ {saving:,.2f}")
+    st.success(f"Calculated Saving (Exclusive GST): ₹ {saving:,.2f}")
     st.divider()
     
     daily_cache.append({
@@ -174,8 +171,8 @@ with tab1:
         else: st.error(f"Email Failed: {msg}")
 
     if st.button("📄 Download Today's PDF", use_container_width=True):
-        pdf = generate_report(pd.DataFrame(daily_cache), f"Today_{date.today()}")
-        with open(pdf, "rb") as f: st.download_button("📥 Click to Download PDF", f, file_name=pdf, use_container_width=True)
+        pdf_file = generate_report(pd.DataFrame(daily_cache), f"Today_{date.today()}")
+        with open(pdf_file, "rb") as f: st.download_button("📥 Click to Download PDF", f, file_name=pdf_file, use_container_width=True)
 
 with tab2:
     sd, ed = st.date_input("From", value=date.today()), st.date_input("To", value=date.today())
