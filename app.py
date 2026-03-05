@@ -33,19 +33,27 @@ class SCRAP_PDF(FPDF):
 def create_pdf(df, filename):
     pdf = SCRAP_PDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 8)
+    pdf.set_font("Arial", 'B', 7)
     pdf.set_fill_color(230, 230, 230)
-    cols = ["Date", "Party Name", "Vehicle No", "Sale GST", "Total Revenue", "Total Purchase", "Total Saving"]
-    widths = [25, 50, 35, 35, 45, 45, 40]
+    
+    # Updated columns to include Manual Purchase GST
+    cols = ["Date", "Party Name", "Vehicle No", "Purc GST", "Sale GST", "Total Rev", "Total Purc", "Saving"]
+    widths = [22, 45, 30, 30, 30, 38, 38, 35]
     
     for i, col in enumerate(cols):
         pdf.cell(widths[i], 10, col, 1, 0, 'C', 1)
     pdf.ln()
     
-    pdf.set_font("Arial", '', 8)
+    pdf.set_font("Arial", '', 7)
     for _, row in df.iterrows():
-        for i, col in enumerate(cols):
-            pdf.cell(widths[i], 10, str(row[col]), 1)
+        pdf.cell(widths[0], 10, str(row["Date"]), 1)
+        pdf.cell(widths[1], 10, str(row["Party Name"])[:25], 1)
+        pdf.cell(widths[2], 10, str(row["Vehicle No"]), 1)
+        pdf.cell(widths[3], 10, f"{row['Manual Purc GST']:,.2f}", 1)
+        pdf.cell(widths[4], 10, f"{row['Sale GST']:,.2f}", 1)
+        pdf.cell(widths[5], 10, f"{row['Total Revenue']:,.2f}", 1)
+        pdf.cell(widths[6], 10, f"{row['Total Purchase']:,.2f}", 1)
+        pdf.cell(widths[7], 10, f"{row['Total Saving']:,.2f}", 1)
         pdf.ln()
     pdf.output(filename)
     return filename
@@ -95,8 +103,14 @@ for i in range(st.session_state.rows):
         m1.metric("Sale GST", f"₹ {sale_gst_val:,.2f}"); m2.metric("Total Revenue", f"₹ {final_rev:,.2f}"); m3.metric("Total Purchase", f"₹ {net_pur:,.2f}")
 
         current_entries.append({
-            "Date": date.today().strftime("%d/%m/%Y"), "Party Name": p_name or "---", "Vehicle No": v_no or "---",
-            "Sale GST": round(sale_gst_val, 2), "Total Revenue": round(final_rev, 2), "Total Purchase": round(net_pur, 2), "Total Saving": round(tsaving, 2)
+            "Date": date.today().strftime("%d/%m/%Y"), 
+            "Party Name": p_name or "---", 
+            "Vehicle No": v_no or "---",
+            "Manual Purc GST": round(pgst or 0.0, 2),
+            "Sale GST": round(sale_gst_val, 2), 
+            "Total Revenue": round(final_rev, 2), 
+            "Total Purchase": round(net_pur, 2), 
+            "Total Saving": round(tsaving, 2)
         })
 
 # --- CONTROLS ---
@@ -105,7 +119,7 @@ if btn_c1.button("➕ Add Vehicle", use_container_width=True): st.session_state.
 if btn_c2.button("❌ Remove Last", use_container_width=True) and st.session_state.rows > 1: st.session_state.rows -= 1; st.rerun()
 if btn_c3.button("🧹 Clear All", use_container_width=True): st.session_state.rows = 1; st.rerun()
 
-# --- TABS FOR EXPORT ---
+# --- TABS ---
 st.divider()
 tab1, tab2, tab3 = st.tabs(["🚀 Sync & Email", "📑 Range PDF Search", "📊 Master Database"])
 
@@ -126,9 +140,9 @@ with tab1:
         with open(pdf_name, "rb") as f: st.download_button("📥 Download Today's PDF", f, file_name=pdf_name)
 
 with tab2:
+    # Range Search remains same but will now use the updated PDF generator
     d_col1, d_col2 = st.columns(2)
-    start_d = d_col1.date_input("From Date", value=date.today())
-    end_d = d_col2.date_input("To Date", value=date.today())
+    start_d, end_d = d_col1.date_input("From Date", value=date.today()), d_col2.date_input("To Date", value=date.today())
     if st.button("🔎 Generate Range PDF", use_container_width=True):
         if os.path.exists(FULL_PATH):
             mdf = pd.read_excel(FULL_PATH)
@@ -138,10 +152,8 @@ with tab2:
                 range_pdf = f"Range_{start_d}_to_{end_d}.pdf"
                 create_pdf(fdf, range_pdf)
                 with open(range_pdf, "rb") as f: st.download_button("📥 Download Range PDF", f, file_name=range_pdf)
-            else: st.warning("No data found for this range.")
 
 with tab3:
     if os.path.exists(FULL_PATH):
         st.dataframe(pd.read_excel(FULL_PATH), use_container_width=True)
         with open(FULL_PATH, "rb") as f: st.download_button("📥 Download Master Excel", f, file_name=MASTER_FILE)
-    else: st.info("Master Ledger is empty.")
