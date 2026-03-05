@@ -41,14 +41,8 @@ def generate_report(df, label):
     pdf.add_page()
     pdf.set_font("Arial", 'B', 8)
     pdf.set_fill_color(240, 240, 240) 
-    pdf.set_text_color(0, 0, 0)       
     
-    cols = {
-        "Date": 22, "Vehicle": 28, "Party": 40, "Location": 25, 
-        "W.Qty": 18, "G.Qty": 18, "P.Rate": 18, "M.Rate": 18, 
-        "Report": 22, "Purch": 22, "Saving": 28
-    }
-    
+    cols = {"Date": 22, "Vehicle": 28, "Party": 40, "Location": 25, "W.Qty": 18, "G.Qty": 18, "P.Rate": 18, "M.Rate": 18, "Report": 22, "Purch": 22, "Saving": 28}
     for title, width in cols.items():
         pdf.cell(width, 10, title, 1, 0, 'C', 1) 
     pdf.ln()
@@ -57,19 +51,18 @@ def generate_report(df, label):
     total_sav = 0
     for _, row in df.iterrows():
         d_str = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%d/%m/%Y')
-        pdf.cell(cols["Date"], 10, d_str, 1)
-        pdf.cell(cols["Vehicle"], 10, str(row['Vehicle No']), 1)
-        pdf.cell(cols["Party"], 10, str(row['Party Name'])[:25], 1) 
-        pdf.cell(cols["Location"], 10, str(row['Location']), 1)
-        pdf.cell(cols["W.Qty"], 10, str(row['White Scrap (Qty)']), 1)
-        pdf.cell(cols["G.Qty"], 10, str(row['Green Scrap (Qty)']), 1)
-        pdf.cell(cols["P.Rate"], 10, str(row['Party Rate']), 1)
-        pdf.cell(cols["M.Rate"], 10, str(row['Mill Rate']), 1)
-        pdf.cell(cols["Report"], 10, f"{float(row['Report']):,.0f}", 1)
-        pdf.cell(cols["Purch"], 10, f"{float(row['Purchase']):,.0f}", 1)
-        s_val = float(row['Total Saving'])
-        pdf.cell(cols["Saving"], 10, f"{s_val:,.2f}", 1)
-        total_sav += s_val
+        pdf.cell(22, 10, d_str, 1)
+        pdf.cell(28, 10, str(row['Vehicle No']), 1)
+        pdf.cell(40, 10, str(row['Party Name'])[:25], 1) 
+        pdf.cell(25, 10, str(row['Location']), 1)
+        pdf.cell(18, 10, str(row['White Scrap (Qty)']), 1)
+        pdf.cell(18, 10, str(row['Green Scrap (Qty)']), 1)
+        pdf.cell(18, 10, str(row['Party Rate']), 1)
+        pdf.cell(18, 10, str(row['Mill Rate']), 1)
+        pdf.cell(22, 10, f"{float(row['Report']):,.0f}", 1)
+        pdf.cell(22, 10, f"{float(row['Purchase']):,.0f}", 1)
+        pdf.cell(28, 10, f"{float(row['Total Saving']):,.2f}", 1)
+        total_sav += float(row['Total Saving'])
         pdf.ln()
         
     pdf.ln(5)
@@ -115,15 +108,16 @@ for i in st.session_state.rows:
     v_no = r1c2.text_input("Vehicle No", key=f"vn_{i}")
     
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+    # FIX: Use 0.0 as default to avoid TypeError
     wq = r2c1.number_input("White Qty", value=0.0, key=f"wq_{i}")
     gq = r2c2.number_input("Green Qty", value=0.0, key=f"gq_{i}")
     pr = r2c3.number_input("Party Rate", value=0.0, key=f"pr_{i}")
     mr = r2c4.number_input("Mill Rate", value=0.0, key=f"mr_{i}")
     
-    # CALCULATED FIELDS (Auto)
-    total_qty = wq + gq
-    auto_rev = pr * total_qty
-    auto_pur = (mr - pr) * total_qty
+    # Calculation Logic
+    total_qty = (wq or 0.0) + (gq or 0.0)
+    auto_rev = (pr or 0.0) * total_qty
+    auto_pur = ((mr or 0.0) - (pr or 0.0)) * total_qty
     
     r3c1, r3c2, r3c3, r3c4 = st.columns(4)
     st.info(f"Auto Revenue: ₹ {auto_rev:,.2f}")
@@ -134,9 +128,7 @@ for i in st.session_state.rows:
     gst_p = r3c3.number_input("GST Purchase %", value=5.0, key=f"gp_{i}")
     gst_s = r3c4.number_input("GST Sale %", value=18.0, key=f"gs_{i}")
 
-    # Final Saving Calculation
     saving = (auto_pur - rep - ch) + (auto_rev * (gst_p/100)) + (auto_rev * (gst_s/100))
-    
     st.success(f"Calculated Saving: ₹ {saving:,.2f}")
     st.divider()
     
@@ -150,7 +142,6 @@ for i in st.session_state.rows:
 if st.button("➕ Add Next Vehicle", use_container_width=True):
     st.session_state.rows.append(len(st.session_state.rows)); st.rerun()
 
-# ACTION TABS
 st.divider()
 tab1, tab2, tab3 = st.tabs(["🚀 Today's Sync", "📑 Range PDF Search", "📊 Master Database"])
 
@@ -165,9 +156,11 @@ with tab1:
         if ok: st.success("Synced & Emailed!"); st.balloons()
         else: st.error(f"Email Failed: {msg}")
 
+    # FIXED: Added today's PDF back here
     if st.button("📄 Download Today's PDF", use_container_width=True):
         pdf_file = generate_report(pd.DataFrame(daily_cache), f"Today_{date.today()}")
-        with open(pdf_file, "rb") as f: st.download_button("📥 Click to Download PDF", f, file_name=pdf_file, use_container_width=True)
+        with open(pdf_file, "rb") as f:
+            st.download_button("📥 Click to Download PDF", f, file_name=pdf_file, use_container_width=True)
 
 with tab2:
     sd, ed = st.date_input("From", value=date.today()), st.date_input("To", value=date.today())
@@ -178,10 +171,14 @@ with tab2:
             fdf = mdf[(mdf['Parsed'] >= sd) & (mdf['Parsed'] <= ed)].drop(columns=['Parsed'])
             if not fdf.empty:
                 r_pdf = generate_report(fdf, f"Range_{sd}_to_{ed}")
-                with open(r_pdf, "rb") as f: st.download_button("📥 Download Range PDF", f, file_name=r_pdf, use_container_width=True)
+                with open(r_pdf, "rb") as f:
+                    st.download_button("📥 Download Range PDF", f, file_name=r_pdf, use_container_width=True)
 
 with tab3:
-    if st.button("📥 Download Master.xlsx", use_container_width=True):
+    # FIXED: Master Excel button explicitly shown
+    if st.button("📊 Prepare Master Excel for Download", use_container_width=True):
         if os.path.exists(FULL_MASTER_PATH):
-            with open(FULL_MASTER_PATH, "rb") as f: st.download_button("📥 Save Master", f, file_name=MASTER_FILE, use_container_width=True)
-                
+            with open(FULL_MASTER_PATH, "rb") as f:
+                st.download_button("📥 Save Master.xlsx", f, file_name=MASTER_FILE, use_container_width=True)
+        else:
+            st.warning("No Master file found. Sync some data first.")
