@@ -26,12 +26,12 @@ def create_pdf(df, filename):
     pdf.add_page()
     pdf.set_font("Arial", 'B', 8)
     pdf.set_fill_color(200, 200, 200)
-    cols = ["Date", "Party Name", "Vehicle No", "Total Revenue", "Net Purchase", "Total Saving"]
-    for col in cols: pdf.cell(45, 10, col, 1, 0, 'C', 1)
+    cols = ["Date", "Party Name", "Vehicle No", "Total Revenue", "Sale GST", "Total Purchase", "Total Saving"]
+    for col in cols: pdf.cell(40, 10, col, 1, 0, 'C', 1)
     pdf.ln()
     pdf.set_font("Arial", '', 8)
     for _, row in df.iterrows():
-        for col in cols: pdf.cell(45, 10, str(row[col]), 1)
+        for col in cols: pdf.cell(40, 10, str(row[col]), 1)
         pdf.ln()
     pdf.output(filename)
     return filename
@@ -59,48 +59,55 @@ for i in range(st.session_state.rows):
         mr = f4.number_input("Mill Rate(J)", value=None, key=f"mr_{i}")
         rep = f5.number_input("Report(K)", value=None, key=f"rp_{i}")
         ch = f6.number_input("Charge(F)", value=None, key=f"ch_{i}")
-        pgst = f7.number_input("Purc. GST (Manual)", value=None, key=f"pgst_{i}")
+        pgst = f7.number_input("Manual Purc. GST", value=None, key=f"pgst_{i}")
         
         # --- CALCULATION ENGINE ---
-        t_qty = (wq or 0) + (gq or 0)
-        base_rev = (pr or 0) * t_qty
+        t_qty = (wq or 0.0) + (gq or 0.0)
+        base_rev = (pr or 0.0) * t_qty
         sale_gst_val = base_rev * 0.18
         final_rev = base_rev + sale_gst_val
         
-        raw_pur = ((mr or 0) - (pr or 0)) * t_qty
-        net_pur = raw_pur - (rep or 0) - (ch or 0) - (pgst or 0)
+        raw_pur_margin = ((mr or 0.0) - (pr or 0.0)) * t_qty
+        # Total Purchase (Net) = Margin - Deductions
+        net_pur = raw_pur_margin - (rep or 0.0) - (ch or 0.0) - (pgst or 0.0)
         tsaving = net_pur + sale_gst_val
+
+        # LIVE METRIC DISPLAY FOR USER
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Sale GST Amount", f"₹ {sale_gst_val:,.2f}")
+        m2.metric("Total Revenue (+18%)", f"₹ {final_rev:,.2f}")
+        m3.metric("Total Purchase (Net)", f"₹ {net_pur:,.2f}")
 
         current_entries.append({
             "Date": date.today().strftime("%d/%m/%Y"),
-            "Party Name": p_name or "---", "Vehicle No": v_no or "---", "Location": loc,
-            "White Scrap": wq or 0, "Green Scrap": gq or 0,
+            "Party Name": p_name or "---", 
+            "Vehicle No": v_no or "---",
             "Total Revenue": round(final_rev, 2),
-            "Sale GST (18%)": round(sale_gst_val, 2),
-            "Net Purchase": round(net_pur, 2),
+            "Sale GST": round(sale_gst_val, 2),
+            "Total Purchase": round(net_pur, 2),
             "Total Saving": round(tsaving, 2),
+            "Location": loc, "White Scrap": wq or 0, "Green Scrap": gq or 0,
             "Manual Purc GST": pgst or 0, "Report": rep or 0, "Charge": ch or 0
         })
 
-# --- LIVE PREVIEW TABLE ---
-st.subheader("📋 Live Preview (Calculated Data)")
+# --- SUMMARY PREVIEW ---
+st.subheader("📋 Calculation Summary")
 preview_df = pd.DataFrame(current_entries)
-st.dataframe(preview_df[["Party Name", "Vehicle No", "Total Revenue", "Sale GST (18%)", "Net Purchase", "Total Saving"]], use_container_width=True)
+st.table(preview_df[["Party Name", "Vehicle No", "Sale GST", "Total Revenue", "Total Purchase", "Total Saving"]])
 
-# --- ROW MANAGEMENT ---
+# --- CONTROLS ---
 btn_c1, btn_c2, btn_c3 = st.columns(3)
-if btn_c1.button("➕ Add Vehicle", use_container_width=True):
+if btn_c1.button("➕ Add Next Vehicle", use_container_width=True):
     st.session_state.rows += 1; st.rerun()
 if btn_c2.button("❌ Remove Last", use_container_width=True) and st.session_state.rows > 1:
     st.session_state.rows -= 1; st.rerun()
 if btn_c3.button("🧹 Clear All", use_container_width=True):
     st.session_state.rows = 1; st.rerun()
 
-# --- EXPORT SECTION ---
+# --- SYNC & DOWNLOAD ---
 st.divider()
 if st.button("🚀 SYNC TO MASTER & GENERATE PDF", type="primary", use_container_width=True):
     try:
-        # Update Excel
         if os.path.exists(FULL_PATH):
             master_df = pd.read_excel(FULL_PATH)
             final_df = pd.concat([master_df, preview_df], ignore_index=True)
@@ -108,16 +115,15 @@ if st.button("🚀 SYNC TO MASTER & GENERATE PDF", type="primary", use_container
             final_df = preview_df
         final_df.to_excel(FULL_PATH, index=False)
         
-        # Create PDF
         pdf_name = f"Report_{date.today()}.pdf"
         create_pdf(preview_df, pdf_name)
         
-        st.success("✅ Data Synced Successfully!")
+        st.success("✅ Master Ledger Updated!")
         dl_c1, dl_c2 = st.columns(2)
         with open(pdf_name, "rb") as f:
             dl_c1.download_button("📥 Download PDF Report", f, file_name=pdf_name, use_container_width=True)
         with open(FULL_PATH, "rb") as f:
             dl_c2.download_button("📥 Download Master Excel", f, file_name=MASTER_FILE, use_container_width=True)
-            
     except Exception as e:
         st.error(f"Error: {e}")
+        
